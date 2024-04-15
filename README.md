@@ -22,7 +22,7 @@
 ```
 
 ## Dataset:
-  We use a randomly sampled dataset named Random_sampling.csv, which contains labeled news articles as either "FAKE" or "REAL".
+  We use a dataset named news.csv, which contains labeled news articles as either "FAKE" or "REAL".
 
 ## Preprocessing:
   Text Cleaning and Lemmatization: We clean the text by removing stop words and non-alphabetic characters, and then lemmatize the text using spaCy.
