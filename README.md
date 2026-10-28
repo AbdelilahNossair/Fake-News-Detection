@@ -1,106 +1,75 @@
-# Fake News Detection Project
+# Fake News Classification Experiments
 
-## Overview:
-  This project aims to detect fake news using advanced NLP techniques and deep learning models. 
-  We leverage the power of spaCy for natural language processing, TextBlob for sentiment analysis, 
-  textstat for readability scoring, and the Hugging Face Transformers library for sequence classification with a DistilBert model.
+Two Python experiments for classifying labeled news articles: a feature-based logistic-regression baseline and a fine-tuned DistilBERT classifier.
 
-## Requirements:
- - pandas
-  - TextBlob
-  - spaCy
-  - textstat
-  - Hugging Face Transformers
-  - datasets library
-  - NumPy
-  - scikit-learn
+## Approaches
 
-## Installation:  
+| Script | Input | Actual model inputs |
+| --- | --- | --- |
+| `ML.py` | `Random_sampling.csv` (not included) | Article length, TextBlob sentiment, readability, named-entity count |
+| `improved_ML.py` | Bundled `news.csv` | Tokenized, lemmatized/filtered article text |
+
+The transformer script also computes engineered statistics, but those columns are **not passed into DistilBERT**. The baseline imports TF-IDF helpers but does not use TF-IDF for its final feature matrix.
+
+## Setup
+
+Use Python 3 in an isolated environment. The repository has no dependency manifest/lockfile; the following packages are inferred from imports.
+
 ```bash
-  pip install pandas textblob spacy textstat transformers datasets numpy scikit-learn
-  python -m spacy download en_core_web_sm
+git clone https://github.com/AbdelilahNossair/Fake-News-Detection.git
+cd Fake-News-Detection
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install pandas numpy textblob spacy textstat scikit-learn
+python -m pip install torch transformers datasets accelerate
+python -m spacy download en_core_web_sm
 ```
 
-## Dataset:
-  We use a dataset named news.csv, which contains labeled news articles as either "FAKE" or "REAL".
+A compatible PyTorch/Transformers installation is required for Trainer. Dependency APIs have changed over time; if you encounter argument/import errors, establish and record a compatible version set. Internet access is needed to obtain the spaCy and DistilBERT models. GPU acceleration can substantially reduce training time.
 
-## Preprocessing:
-  Text Cleaning and Lemmatization: We clean the text by removing stop words and non-alphabetic characters, and then lemmatize the text using spaCy.
-  Feature Engineering: We add features such as article length, sentiment polarity, readability score, and entities count to the dataset.
+## Data contract
 
-## Model Training:
-  We use the DistilBert model from the Hugging Face Transformers library for sequence classification.
-  The model is fine-tuned on our dataset to classify news articles as fake or real.
+The transformer script expects `news.csv` in the current directory with `text` and `label` columns. Labels map as follows:
 
-## Training Process:
-  Tokenization: The text data is tokenized using DistilBertTokenizerFast from the Hugging Face library.
-  Dataset Splitting: The dataset is split into training and testing sets with an 80/20 ratio.
-  Model Configuration and Training: We configure the training arguments and initiate training using the Trainer API from Hugging Face. 
-        The model is evaluated on the test set post-training.
-
-## Evaluation:
-  The model's performance is evaluated based on accuracy on the test set. This metric helps us understand how well our model can generalize to unseen data.
-
-## Usage:
-Follow the steps in the provided code snippets to run the training process, evaluate the model, and obtain predictions. Ensure you have the necessary libraries installed and the dataset ready.
-
-### Step 1: Define the `compute_metrics` Function
-Define the `compute_metrics` function to calculate precision, recall, F1 score, and accuracy. This function will be used by the `Trainer` to compute metrics on the evaluation set.
-
-```python
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, confusion_matrix
-import numpy as np
-from transformers import EvalPrediction
-
-def compute_metrics(p: EvalPrediction):
-    preds = np.argmax(p.predictions, axis=1)
-    precision = precision_score(p.label_ids, preds, average='binary')
-    recall = recall_score(p.label_ids, preds, average='binary')
-    f1 = f1_score(p.label_ids, preds, average='binary')
-    accuracy = accuracy_score(p.label_ids, preds)
-    return {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "accuracy": accuracy
-    }
+```text
+FAKE -> 0
+REAL -> 1
 ```
 
-### Step 2: Include the `compute_metrics` Function in Your Trainer Setup
-Instantiate the `Trainer` with the `compute_metrics` function. Train your model and evaluate it using the `Trainer`.
+Check missing text, unexpected labels, duplicate articles, and source overlap before training. The baseline requires the separate `Random_sampling.csv`; supply it with the same relevant columns or deliberately edit the input path. Do not assume the filename used by one script is used by both.
 
-```python
-from transformers import Trainer
+## Run the transformer experiment
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_test_dataset['train'],
-    eval_dataset=train_test_dataset['test'],
-    compute_metrics=compute_metrics,
-)
-
-trainer.train()
-
-results = trainer.evaluate()
-print("Test set metrics:", results)
+```bash
+python improved_ML.py
 ```
 
-### Step 3: Obtain Predictions and Calculate Confusion Matrix
-After training and evaluation, obtain predictions for the test dataset and calculate the confusion matrix to analyze the model's performance further.
+The workflow:
 
-```python
-predictions = trainer.predict(train_test_dataset['test'])
-preds = np.argmax(predictions.predictions, axis=-1)
-y_true = predictions.label_ids
-y_pred = preds
+1. Loads spaCy and the CSV.
+2. Lemmatizes/lowercases text and removes stop words/nonalphabetic tokens.
+3. Computes auxiliary text statistics.
+4. Tokenizes with `distilbert-base-uncased`, padding and truncating to the tokenizer's maximum length.
+5. Makes an 80/20 split through Hugging Face Datasets.
+6. Fine-tunes for three epochs with per-device training batch size 8, warmup steps 500, and weight decay 0.01.
+7. Prints precision, recall, F1, accuracy, and a confusion matrix.
 
-cm = confusion_matrix(y_true, y_pred)
-print("Confusion Matrix:")
-print(cm)
+Training outputs/logging target `./results` and `./logs`. There is no separate inference service or explicit final-model export command in this script.
+
+## Run the baseline
+
+After preparing its expected CSV:
+
+```bash
+python ML.py
 ```
 
-Follow these steps to train your model, evaluate its performance, obtain predictions, and understand its performance in detail through various metrics and the confusion matrix. Ensure all necessary Python libraries for computation and evaluation are installed.
+It uses an 80/20 scikit-learn split with random_state=42, fits logistic regression with max_iter=1000, and prints coefficients, accuracy, and a classification report. Coefficient interpretation depends on the actual class order and feature scaling.
 
-## Contribution: 
-  We welcome contributions to improve the model's accuracy and efficiency or extend its capabilities. Please feel free to submit pull requests or open issues to discuss potential improvements.
+## Interpretation and limitations
+
+These are supervised dataset experiments, not an automated truth-verification system. Article style, corpus source, and topic can dominate predictions. The two scripts do not share identical data paths or a guaranteed identical split, so their printed scores are not a controlled head-to-head comparison.
+
+The transformer split does not explicitly set a seed in the script. Lemmatization and stop-word removal also change the pretrained model's natural-text input distribution. No fixed environment, external-source evaluation, leakage audit, or reproducible benchmark result is supplied here.
+
+A useful next step is one documented dataset, duplicate/source-aware splits, saved preprocessing/model artifacts, and a compact results table with seed and dependency versions. No standalone license file is included; dataset reuse rights must be checked separately.
